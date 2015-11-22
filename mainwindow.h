@@ -16,7 +16,8 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
-    void downloadVPN(QString str);
+    void rankVPN(QString str);
+
     void clearVpnList();
 
 signals:
@@ -26,6 +27,7 @@ private slots:
     void on_Fetch_clicked();
     void getContent(QString url, QByteArray data);
     void getVPN(QString url, QByteArray data);
+    void downloadVPN(QString str);
     void on_Quit_clicked();
     void on_Browse_clicked();
 
