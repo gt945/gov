@@ -10,6 +10,7 @@ Website::Website(QObject *parent) : QObject(parent)
     m_manager = new QNetworkAccessManager(this);
     aborted = 0;
     started = 0;
+    file = NULL;
     connect(m_manager, SIGNAL(finished(QNetworkReply*)),
             this, SLOT(replyFinished(QNetworkReply*)));
 }
@@ -20,16 +21,23 @@ Website::~Website()
     m_manager->deleteLater();
 }
 
-void Website::fetch(QString url)
+void Website::fetch(QString url, QString filename)
 {
-    this->url = url;
-    connect(this, SIGNAL(start()), this, SLOT(startFetch()));
+    fetchLater(url, filename);
     emit start();
 }
 
-void Website::fetchLater(QString url)
+void Website::fetchLater(QString url, QString filename)
 {
     this->url = url;
+    if (!filename.isNull()) {
+        file = new QFile(filename);
+        if (!file->open(QIODevice::WriteOnly)) {
+            aborted = 1;
+            delete file;
+            file = NULL;
+        }
+    }
     connect(this, SIGNAL(start()), this, SLOT(startFetch()));
 }
 
@@ -39,37 +47,62 @@ void Website::replyFinished(QNetworkReply *reply)
     QByteArray data;
 
     reply->deleteLater();
+    if (file) {
+        file->flush();
+        file->close();
+    }
+    QVariant redirectionTarget = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
+    if (reply->error()) {
+        //if (!aborted) {
+            emit finished();
+        //}
+        if (file) {
+            file->remove();
+        }
+        this->deleteLater();
+    } else if (!redirectionTarget.isNull()){
+        started = 0;
+        QUrl newUrl = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
+        newUrl = reply->url().resolved(newUrl);
+        if (file) {
+            file->open(QIODevice::WriteOnly);
+            file->resize(0);
+        }
+        fetch(newUrl.toString());
 
-    if(reply->error() == QNetworkReply::NoError) {
-        int v = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (v >= 200 && v < 300) {
+        return;
+    } else {
+        if (!file) {
             data = reply->readAll();
             emit replyContent(reply->url().toString(), data);
-            this->deleteLater();
-            emit finished();
-
-        } else if (v >= 300 && v < 400) {
-            started = 0;
-            QUrl newUrl = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
-            newUrl = reply->url().resolved(newUrl);
-            fetch(newUrl.toString());
-
-            return;
         }
-    } else {
-        if (!aborted) {
-            emit finished();
-        }
-
+        qDebug() << __LINE__ << "finished";
+        emit finished();
         this->deleteLater();
+    }
+    if (file) {
+        delete file;
+        file = NULL;
+    }
+
+}
+
+void Website::replyReadyRead()
+{
+    QNetworkReply *reply = (QNetworkReply *)sender();
+    if (file) {
+        file->write(reply->readAll());
     }
 }
 
 void Website::abortFetch()
 {
-//    qDebug() <<  "Abort:" << url;
+    qDebug() <<  "Abort:" << url;
     aborted = 1;
     emit cancel();
+    if (file) {
+        file->remove();
+    }
     this->deleteLater();
 }
 
@@ -85,8 +118,11 @@ void Website::startFetch()
         request.setRawHeader( "Charset", "utf-8" );
         QNetworkReply *reply = m_manager->get(request);
         connect(this, SIGNAL(cancel()), reply, SLOT(abort()));
-//        qDebug() <<  "Fetch:" << url;
+        connect(reply, SIGNAL(readyRead()), this, SLOT(replyReadyRead()));
+
+        qDebug() <<  "Fetch:" << url;
     } else {
+        qDebug() <<  "Abort Fetch:" << url;
         emit finished();
     }
 

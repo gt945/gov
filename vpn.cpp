@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QHostAddress>
 #include <QDateTime>
+#include <QUrl>
 #include "vpn.h"
 
 
@@ -13,9 +14,10 @@ Vpn::Vpn(QObject *parent) : QObject(parent)
 
 }
 
-Vpn::Vpn(QString str)
+Vpn::Vpn(QString str1, QString str2)
 {
-    url = str;
+    host = str1;
+    url = str2;
     QRegularExpression re(QString("ip=(.*?)&.*udp=(.*?)&.*sid=(.*?)&hid=(.*)"));
     QRegularExpressionMatchIterator matchi = re.globalMatch(url);
     if (matchi.hasNext()) {
@@ -71,16 +73,31 @@ void Vpn::rank()
 
 }
 
+void Vpn::dump()
+{
+    qDebug() << timescore << getDownloadURL();
+}
+
+QString Vpn::getDownloadURL()
+{
+    QUrl url(host);
+    QString path = QString("/common/openvpn_download.aspx?sid=%1&udp=1&host=%2&port=%3&hid=%4&/vpngate_%5_udp_%6.ovpn").arg(sid,ip,port,hid, ip, port);
+    return url.resolved(path).toString();
+}
+
+QString Vpn::getFilename()
+{
+    return QString("%1_vpngate_%2_udp_%3.ovpn").arg(QString::number(timescore), ip, port);
+}
 
 void Vpn::receiveFinished()
 {
 
     timescore = QDateTime::currentMSecsSinceEpoch() - timescore;
-    qDebug() << ip << timescore;
     sock.close();
+    count++;
     if (count < 10) {
         out = false;
-        count++;
     } else if (count == 10) {
         emit enough();
     }

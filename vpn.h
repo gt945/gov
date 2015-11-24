@@ -10,10 +10,13 @@ class Vpn : public QObject
     Q_OBJECT
 public:
     explicit Vpn(QObject *parent = 0);
-    Vpn(QString url);
+    Vpn(QString str1, QString url);
     ~Vpn();
     void rank();
     void abort();
+    void dump();
+    QString getDownloadURL();
+    QString getFilename();
 
     static int count;
     bool out;
@@ -23,6 +26,7 @@ signals:
 public slots:
     void receiveFinished();
 private:
+    QString host;
     QString url;
     QString ip;
     QString port;

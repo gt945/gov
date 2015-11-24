@@ -12,6 +12,7 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
+    fetched = 0;
     ui->setupUi(this);
 }
 
@@ -21,7 +22,7 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::rankVPN(QString str)
+void MainWindow::rankVPN()
 {
     for( int i = 0; i < vpnList.count(); ++i )
     {
@@ -32,10 +33,32 @@ void MainWindow::rankVPN(QString str)
 
 void MainWindow::downloadVPN()
 {
+    Website *last = NULL;
+    emit abortFetch();
     for( int i = 0; i < vpnList.count(); ++i )
     {
-        vpnList[i]->rank();
+        if (vpnList[i]->out == false) {
+               //qDebug() << vpnList[i]->timescore;
+            Website *w = new Website;
+            QString filename = QString("%1/%2").arg(this->ui->filePath->text(), vpnList[i]->getFilename());
+            w->fetchLater(vpnList[i]->getDownloadURL(), filename);
+            if (last) {
+                connect(w, SIGNAL(finished()), last, SLOT(startFetch()));
+            } else {
+                connect(w, SIGNAL(finished()), this, SLOT(allDone()));
+            }
+            last = w;
+            connect(this, SIGNAL(abortFetch()), w, SLOT(abortFetch()));
+        }
     }
+
+    last->startFetch();
+}
+
+void MainWindow::allDone()
+{
+    qDebug() << "all done";
+    clearVpnList();
 }
 
 void MainWindow::clearVpnList()
@@ -44,11 +67,12 @@ void MainWindow::clearVpnList()
         delete vpnList[i];
     }
     vpnList.clear();
+    qDebug() << "clearVpnList";
+    fetched = 0;
 }
 
 void MainWindow::on_Fetch_clicked()
 {
-    fetched = 0;
     emit abortFetch();
     QString text = ui->UrlList->toPlainText();
     QRegularExpression re(QString("http://.*/"));
@@ -71,18 +95,18 @@ void MainWindow::getContent(QString url, QByteArray data)
     if (!fetched) {
         fetched = 1;
         emit abortFetch();
-        qDebug() << url;
+        qDebug() << __LINE__ << url;
         //qDebug() << url << QString(data);
         QRegularExpression re(QString("(do_openvpn.aspx.*?)'"));
         QRegularExpressionMatchIterator matchi = re.globalMatch(data);
         while (matchi.hasNext()) {
             QRegularExpressionMatch match = matchi.next();
             if (match.hasMatch()) {
-                vpnList.append(new Vpn(match.captured(1)));
+                vpnList.append(new Vpn(url, match.captured(1)));
             }
 
         }
-        rankVPN(url);
+        rankVPN();
     }
 
 }
